@@ -172,6 +172,75 @@
     .kpi.redish { background: #fff1f1; border-color: #fecaca; }
     .kpi.greenish { background: #ecfdf3; border-color: #bbf7d0; }
     .kpi.blueish { background: #eff6ff; border-color: #bfdbfe; }
+
+    .defect-filter-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .defect-filter-card {
+      display: block;
+      text-align: left;
+      border: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .defect-filter-card.active {
+      outline: 3px solid rgba(29,78,216,.18);
+      border-color: var(--blue2);
+    }
+    .defect-filter-card .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 800;
+      line-height: 1.35;
+    }
+    .detail-card {
+      cursor: pointer;
+    }
+    .detail-body {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #edf1f7;
+      font-size: 13px;
+      color: #344054;
+    }
+    .detail-card.open .detail-body {
+      display: block;
+    }
+    .detail-line {
+      display: grid;
+      grid-template-columns: 78px 1fr;
+      gap: 8px;
+      padding: 5px 0;
+      line-height: 1.45;
+    }
+    .detail-line b {
+      color: #111827;
+    }
+    .detail-photos {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .detail-photos img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #eef2f7;
+    }
+    @media (max-width: 360px) {
+      .defect-filter-grid {
+        grid-template-columns: 1fr;
+      }
+      .detail-line {
+        grid-template-columns: 1fr;
+        gap: 2px;
+      }
+    }
+
     .field {
       margin-bottom: 12px;
     }
@@ -385,16 +454,22 @@
       <div class="actions">
         <button id="refreshBtn" class="primary" type="button">구글시트 새로고침</button>
       </div>
-      <div class="grid">
-        <div class="kpi redish"><div class="label">전체 불량</div><div id="kTotal" class="num">0</div></div>
-        <div class="kpi greenish"><div class="label">사내 불량</div><div id="kInternal" class="num">0</div></div>
-        <div class="kpi blueish"><div class="label">외주 불량</div><div id="kExternal" class="num">0</div></div>
-        <div class="kpi"><div class="label">품번 기준</div><div id="kParts" class="num">0</div></div>
+      <div class="grid defect-filter-grid">
+        <button id="internalDefectCard" class="kpi greenish defect-filter-card active" type="button">
+          <div class="label">사내 불량</div>
+          <div id="kInternal" class="num">0</div>
+          <div class="hint">상세내역 보기</div>
+        </button>
+        <button id="externalDefectCard" class="kpi blueish defect-filter-card" type="button">
+          <div class="label">외주 불량</div>
+          <div id="kExternal" class="num">0</div>
+          <div class="hint">상세내역 보기</div>
+        </button>
       </div>
     </div>
 
     <div class="panel">
-      <h2>최근 불량 이력</h2>
+      <h2 id="defectListTitle">사내 불량 상세내역</h2>
       <div id="recentList" class="list"><div class="empty">데이터 없음</div></div>
     </div>
   </section>
@@ -509,6 +584,7 @@ const state = {
   embeddedRows: [],
   embeddedLoaded: false,
   selectedPart: null,
+  defectFilter: 'internal',
   photos: []
 };
 
@@ -802,6 +878,7 @@ async function loadAll() {
   renderDashboard();
   setStatus('구글시트 연동 완료 · ' + new Date().toLocaleTimeString('ko-KR'), '');
   if ($('partSearch') && $('partSearch').value.trim()) searchParts();
+  checkNewDefectAlert();
 }
 
 function renderDashboard() {
@@ -810,35 +887,179 @@ function renderDashboard() {
   const external = externalCount(data);
   $('kInternal').textContent = internal;
   $('kExternal').textContent = external;
-  $('kTotal').textContent = internal + external;
-  $('kParts').textContent = state.masterRows.length;
 
-  const list = allDefects(data).slice(0, 20);
-  const el = $('recentList');
-  if (!list.length) {
-    el.innerHTML = '<div class="empty">데이터 없음</div>';
+  renderDefectDetails();
+}
+
+
+function getDefectUniqueKey(d) {
+  return String(d.id || d.defectId || d._id || [
+    d._kind || '',
+    d.partNo || d['품번'] || '',
+    d.date || d['발생일자'] || '',
+    d.defect || d['불량내용'] || '',
+    d.createdAt || ''
+  ].join('|'));
+}
+
+function getDefectTimeValue(d) {
+  const raw = d.updatedAt || d.createdAt || d.date || d['발생일자'] || '';
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function getAllDefectsSorted() {
+  return allDefects(state.data || {}).sort((a, b) => {
+    const bt = getDefectTimeValue(b);
+    const at = getDefectTimeValue(a);
+    if (bt !== at) return bt - at;
+    return getDefectUniqueKey(b).localeCompare(getDefectUniqueKey(a));
+  });
+}
+
+function checkNewDefectAlert() {
+  const list = getAllDefectsSorted();
+  if (!list.length) return;
+
+  const latestKey = getDefectUniqueKey(list[0]);
+  const storageKey = 'quality_mobile_last_seen_defect_key_v1';
+  const prevKey = localStorage.getItem(storageKey);
+
+  if (!prevKey) {
+    localStorage.setItem(storageKey, latestKey);
     return;
   }
-  el.innerHTML = list.map(d => {
+
+  if (prevKey === latestKey) return;
+
+  const newItems = [];
+  for (const d of list) {
+    const key = getDefectUniqueKey(d);
+    if (key === prevKey) break;
+    newItems.push(d);
+    if (newItems.length >= 5) break;
+  }
+
+  localStorage.setItem(storageKey, latestKey);
+
+  if (!newItems.length) return;
+
+  const first = newItems[0];
+  const title = first.defect || first['불량내용'] || '(불량내용 없음)';
+  const pn = first.partNo || first['품번'] || '';
+  const kind = first._kind || '';
+  const cnt = newItems.length;
+
+  const message = cnt === 1
+    ? `신규 불량 1건이 있습니다.\n\n[${kind}] ${pn}\n${title}`
+    : `신규 불량 ${cnt}건이 있습니다.\n\n최근: [${kind}] ${pn}\n${title}`;
+
+  setTimeout(() => alert(message), 350);
+}
+
+function markCurrentDefectsSeen() {
+  const list = getAllDefectsSorted();
+  if (!list.length) return;
+  localStorage.setItem('quality_mobile_last_seen_defect_key_v1', getDefectUniqueKey(list[0]));
+}
+
+function normalizePhotosFromDefect(d) {
+  const raw = d.photos || d.photoUrls || d.photoUrl || d['사진'] || d['불량사진'] || [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return [];
+    if (s.charAt(0) === '[') {
+      try { return JSON.parse(s); } catch(e) { return []; }
+    }
+    return s.split(/\s*[,|\n]\s*/).filter(Boolean).map((url, i) => ({ name:'사진 '+(i+1), url }));
+  }
+  if (raw && typeof raw === 'object') return [raw];
+  return [];
+}
+
+function photoUrlOf(p) {
+  if (!p) return '';
+  return p.thumbnail || p.url || p.driveUrl || p.fileUrl || p.src || p.href || '';
+}
+
+function getFilteredDefects() {
+  const want = state.defectFilter === 'external' ? '외주' : '사내';
+  return getAllDefectsSorted().filter(d => d._kind === want);
+}
+
+function renderDefectDetails() {
+  const titleEl = $('defectListTitle');
+  if (titleEl) titleEl.textContent = state.defectFilter === 'external' ? '외주 불량 상세내역' : '사내 불량 상세내역';
+
+  const internalCard = $('internalDefectCard');
+  const externalCard = $('externalDefectCard');
+  if (internalCard) internalCard.classList.toggle('active', state.defectFilter === 'internal');
+  if (externalCard) externalCard.classList.toggle('active', state.defectFilter === 'external');
+
+  const list = getFilteredDefects();
+  const el = $('recentList');
+
+  if (!list.length) {
+    el.innerHTML = '<div class="empty">선택한 구분의 불량 이력이 없습니다.</div>';
+    return;
+  }
+
+  el.innerHTML = list.map((d, idx) => {
     const status = d.status || d['처리상태'] || '접수';
-    const title = d.defect || d['불량내용'] || '(불량내용 없음)';
+    const defectTitle = d.defect || d['불량내용'] || '(불량내용 없음)';
     const pn = d.partNo || d['품번'] || '';
     const name = d.itemName || d['품명'] || '';
     const date = d.date || d['발생일자'] || d.createdAt || '';
-    return `<div class="defect-card">
+    const qty = d.qty || d['수량'] || '';
+    const worker = d.worker || d['작업자'] || d.registrar || d.owner || '';
+    const process = d.processName || d.process || d['공정'] || '';
+    const supplier = d.supplier || d.vendor || d['업체'] || d['외주업체'] || '';
+    const cause = d.cause || d['원인'] || '';
+    const action = d.action || d.countermeasure || d['조치내용'] || d['대책'] || '';
+    const photos = normalizePhotosFromDefect(d).map(photoUrlOf).filter(Boolean);
+
+    return `<div class="defect-card detail-card" data-idx="${idx}">
       <div class="top">
         <div>
-          <div class="title">${escapeHtml(title)}</div>
-          <div class="meta">${escapeHtml(pn)} ${name ? '· '+escapeHtml(name) : ''}</div>
-          <div class="meta">${escapeHtml(date)} · ${escapeHtml(d._kind || '')}</div>
+          <div class="title">${escapeHtml(defectTitle)}</div>
+          <div class="meta">${escapeHtml(pn)}${name ? ' · '+escapeHtml(name) : ''}</div>
+          <div class="meta">${escapeHtml(date)} · ${escapeHtml(d._kind || '')}${qty ? ' · 수량 '+escapeHtml(qty) : ''}</div>
         </div>
         <span class="badge">${escapeHtml(status)}</span>
       </div>
+      <div class="detail-body">
+        <div class="detail-line"><b>품번</b><span>${escapeHtml(pn || '-')}</span></div>
+        <div class="detail-line"><b>품명</b><span>${escapeHtml(name || '-')}</span></div>
+        <div class="detail-line"><b>${state.defectFilter === 'external' ? '업체' : '공정'}</b><span>${escapeHtml((state.defectFilter === 'external' ? supplier : process) || '-')}</span></div>
+        <div class="detail-line"><b>작업자</b><span>${escapeHtml(worker || '-')}</span></div>
+        <div class="detail-line"><b>불량내용</b><span>${escapeHtml(defectTitle || '-')}</span></div>
+        ${cause ? `<div class="detail-line"><b>원인</b><span>${escapeHtml(cause)}</span></div>` : ''}
+        ${action ? `<div class="detail-line"><b>조치/대책</b><span>${escapeHtml(action)}</span></div>` : ''}
+        ${photos.length ? `<div class="detail-photos">${photos.slice(0,3).map(u => `<a href="${escapeAttr(u)}" target="_blank" rel="noopener"><img src="${escapeAttr(u)}" alt="불량사진"></a>`).join('')}</div>` : ''}
+      </div>
     </div>`;
   }).join('');
+
+  [...el.querySelectorAll('.detail-card')].forEach(card => {
+    card.addEventListener('click', function(e) {
+      const tag = e.target && String(e.target.tagName).toLowerCase();
+      if (tag === 'a' || tag === 'img') return;
+      card.classList.toggle('open');
+    });
+  });
+}
+
+function setDefectFilter(kind) {
+  state.defectFilter = kind === 'external' ? 'external' : 'internal';
+  renderDefectDetails();
 }
 
 function escapeHtml(v) {
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function escapeAttr(v) {
   return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
@@ -1040,6 +1261,7 @@ async function submitDefect() {
     alert('불량 등록이 완료되었습니다.');
     resetForm(false);
     await loadAll();
+    markCurrentDefectsSeen();
     showTab('dash');
   } catch(e) {
     console.error(e);
@@ -1082,6 +1304,8 @@ function bind() {
   $('tabReg').addEventListener('click', () => showTab('reg'));
   $('bottomDash').addEventListener('click', () => showTab('dash'));
   $('bottomReg').addEventListener('click', () => showTab('reg'));
+  $('internalDefectCard').addEventListener('click', () => setDefectFilter('internal'));
+  $('externalDefectCard').addEventListener('click', () => setDefectFilter('external'));
   $('refreshBtn').addEventListener('click', () => loadAll().catch(e => {
     setStatus('불러오기 실패: ' + e.message, 'err');
     alert(e.message);

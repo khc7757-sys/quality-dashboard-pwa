@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quality-mobile-field-pwa-v4-instantsearch';
+const CACHE_NAME = 'quality-mobile-field-pwa-v5-detail-alert';
 
 const APP_FILES = [
   './',
