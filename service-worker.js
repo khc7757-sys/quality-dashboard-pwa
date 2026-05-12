@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quality-mobile-field-pwa-v1';
+const CACHE_NAME = 'quality-mobile-field-pwa-v2-searchfix';
 
 const APP_FILES = [
   './',

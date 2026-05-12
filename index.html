@@ -564,6 +564,109 @@ function normalizeExternalRow(row, i) {
   };
 }
 
+
+function normalizeGenericPartRow(row, i, kind) {
+  row = row && typeof row === 'object' ? row : {};
+  const out = {
+    kind: kind || '',
+    rowId: row.rowId || row._id || row.id || ('G-' + i),
+    partNo: pickFirst(row, ['partNo','품번','품목번호','품목코드','PART NO','Part No','도번','도면번호','품목','code','itemCode']),
+    itemName: pickFirst(row, ['itemName','품명','품목명','PART NAME','Part Name','name','item','description','desc']),
+    modelName: pickFirst(row, ['modelName','모델명','모델','MODEL','Model']),
+    processName: pickFirst(row, ['processName','공정명','공정','PROCESS','Process','발견공정','공정구분']),
+    partGroup: pickFirst(row, ['partGroup','파트명','파트','PART','Part','분류','구분']),
+    supplier: pickFirst(row, ['supplier','vendor','업체명','업체','거래처','외주업체','협력사'])
+  };
+  if (!out.kind) out.kind = out.supplier ? 'external' : 'internal';
+  return out;
+}
+
+function pushUniquePart(map, row) {
+  if (!row || (!row.partNo && !row.itemName)) return;
+  const key = [
+    row.kind || '',
+    row.partNo || '',
+    row.itemName || '',
+    row.processName || '',
+    row.supplier || ''
+  ].join('|').toLowerCase();
+  if (!map[key]) map[key] = row;
+}
+
+function collectRowsDeep(value, out, depth) {
+  if (depth > 4 || value == null) return;
+  if (Array.isArray(value)) {
+    value.forEach(v => collectRowsDeep(v, out, depth + 1));
+    return;
+  }
+  if (typeof value === 'object') {
+    const row = normalizeGenericPartRow(value, out.length, '');
+    if (row.partNo || row.itemName) {
+      out.push(value);
+    }
+    Object.keys(value).forEach(k => {
+      const v = value[k];
+      if (Array.isArray(v) || (v && typeof v === 'object')) collectRowsDeep(v, out, depth + 1);
+    });
+  }
+}
+
+function rebuildPartSearchIndex() {
+  const data = state.data || {};
+  const md = data.masterData || {};
+  const unique = {};
+
+  const externalBase = Array.isArray(md.externalBaseRows) ? md.externalBaseRows : [];
+  const internalBase = Array.isArray(md.internalBaseRows) ? md.internalBaseRows : [];
+
+  externalBase.map(normalizeExternalRow).forEach(r => pushUniquePart(unique, r));
+  internalBase.map(normalizeInternalRow).forEach(r => pushUniquePart(unique, r));
+
+  // keys 안에 들어 있는 기준정보 배열도 폭넓게 검색 인덱스에 포함
+  const keys = data.keys || {};
+  Object.keys(keys).forEach(key => {
+    const parsed = safeJson(keys[key], null);
+    if (!parsed) return;
+
+    const lowered = key.toLowerCase();
+    const guessedKind =
+      lowered.includes('external') || lowered.includes('vendor') || lowered.includes('supplier') || key.includes('외주') || key.includes('업체')
+        ? 'external'
+        : lowered.includes('internal') || key.includes('사내')
+          ? 'internal'
+          : '';
+
+    if (Array.isArray(parsed)) {
+      parsed.map((x, i) => normalizeGenericPartRow(x, i, guessedKind)).forEach(r => pushUniquePart(unique, r));
+    } else if (typeof parsed === 'object') {
+      const rows = [];
+      collectRowsDeep(parsed, rows, 0);
+      rows.map((x, i) => normalizeGenericPartRow(x, i, guessedKind)).forEach(r => pushUniquePart(unique, r));
+    }
+  });
+
+  // 이미 등록된 불량 이력에 있는 품번도 검색 후보에 포함
+  safeArrayKey(data, 'internalDefects.v1').forEach((d, i) => {
+    pushUniquePart(unique, normalizeGenericPartRow(d, i, 'internal'));
+  });
+
+  const extObj = safeObjectKey(data, 'partSearch.defectHistories.v1');
+  Object.keys(extObj || {}).forEach(partNo => {
+    const list = extObj[partNo];
+    if (!Array.isArray(list)) return;
+    list.forEach((d, i) => {
+      const row = Object.assign({}, d, { partNo: d.partNo || partNo });
+      pushUniquePart(unique, normalizeGenericPartRow(row, i, 'external'));
+    });
+  });
+
+  const allRows = Object.keys(unique).map(k => unique[k]);
+  state.internalRows = allRows.filter(r => r.kind !== 'external');
+  state.externalRows = allRows.filter(r => r.kind === 'external');
+  state.masterRows = allRows;
+}
+
+
 function safeJson(txt, fallback) {
   try { return txt ? JSON.parse(String(txt)) : fallback; } catch(e) { return fallback; }
 }
@@ -619,13 +722,10 @@ async function loadAll() {
   const out = await callGoogleSheet('loadAll', {});
   state.data = out.data || {};
 
-  const md = state.data.masterData || {};
-  state.externalRows = (md.externalBaseRows || []).map(normalizeExternalRow).filter(r => r.partNo || r.itemName);
-  state.internalRows = (md.internalBaseRows || []).map(normalizeInternalRow).filter(r => r.partNo || r.itemName);
-  state.masterRows = state.internalRows.concat(state.externalRows);
+  rebuildPartSearchIndex();
 
   renderDashboard();
-  setStatus('구글시트 연동 완료 · ' + new Date().toLocaleTimeString('ko-KR'), '');
+  setStatus('구글시트 연동 완료 · 품번검색 ' + state.masterRows.length + '건 · ' + new Date().toLocaleTimeString('ko-KR'), '');
 }
 
 function renderDashboard() {
@@ -712,7 +812,8 @@ function searchParts() {
     renderSearchResults([]);
     return;
   }
-  const source = state.kind === 'internal' ? state.internalRows : state.externalRows;
+  let source = state.kind === 'internal' ? state.internalRows : state.externalRows;
+  if (!source.length) source = state.masterRows;
   const rows = source.filter(r => {
     const hay = [r.partNo, r.itemName, r.modelName, r.processName, r.supplier, r.partGroup].join(' ').toLowerCase();
     return hay.includes(q);
