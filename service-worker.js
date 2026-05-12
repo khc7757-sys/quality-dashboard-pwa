@@ -1,13 +1,11 @@
-const CACHE_NAME = 'quality-dashboard-v41-pwa-cache-v3';
+const CACHE_NAME = 'quality-mobile-field-pwa-v1';
 
 const APP_FILES = [
-  "./",
-  "./index.html",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png",
-  "./external-b64.txt",
-  "./internal-b64.txt"
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', function(event) {
@@ -33,7 +31,6 @@ self.addEventListener('activate', function(event) {
 
 self.addEventListener('fetch', function(event) {
   const requestUrl = new URL(event.request.url);
-
   if (
     requestUrl.hostname.includes('script.google.com') ||
     requestUrl.hostname.includes('googleusercontent.com') ||
@@ -43,7 +40,6 @@ self.addEventListener('fetch', function(event) {
     event.respondWith(fetch(event.request));
     return;
   }
-
   event.respondWith(
     caches.match(event.request).then(function(cached) {
       return cached || fetch(event.request);

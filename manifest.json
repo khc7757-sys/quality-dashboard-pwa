@@ -1,12 +1,12 @@
 {
-  "name": "품질현황 통합판",
+  "name": "품질현황 현장등록",
   "short_name": "품질현황",
-  "description": "품질현황 통합 대시보드",
+  "description": "현장 불량 등록 및 품질현황 조회",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "background_color": "#f3f6fb",
+  "theme_color": "#1646a3",
   "orientation": "portrait-primary",
   "icons": [
     {
