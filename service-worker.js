@@ -1,13 +1,13 @@
-const CACHE_NAME = 'quality-dashboard-v41-pwa-cache-v2';
+const CACHE_NAME = 'quality-dashboard-v41-pwa-cache-v3';
 
 const APP_FILES = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  './external-b64.txt',
-  './internal-b64.txt'
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./external-b64.txt",
+  "./internal-b64.txt"
 ];
 
 self.addEventListener('install', function(event) {
@@ -23,13 +23,8 @@ self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys().then(function(keys) {
       return Promise.all(
-        keys
-          .filter(function(key) {
-            return key !== CACHE_NAME;
-          })
-          .map(function(key) {
-            return caches.delete(key);
-          })
+        keys.filter(function(key) { return key !== CACHE_NAME; })
+            .map(function(key) { return caches.delete(key); })
       );
     })
   );

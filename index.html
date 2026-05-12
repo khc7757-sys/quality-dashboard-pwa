@@ -664,8 +664,8 @@ const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby06iR8
 </form>
 </dialog>
 </main>
-<script id="external-b64" type="text/plain"></script>
-<script id="internal-b64" type="text/plain"></script>
+<script id="external-b64" type="text/plain" data-src="./external-b64.txt"></script>
+<script id="internal-b64" type="text/plain" data-src="./internal-b64.txt"></script>
 <script>
 (function(){
 'use strict';
@@ -706,7 +706,26 @@ function pickFirst(r,keys){
   }
   return '';
 }
-function esc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}function unique(arr){return [...new Set((arr||[]).map(v=>String(v||'').trim()).filter(Boolean))]}function countBy(rows,keyFn){const m=new Map();for(const r of rows){const k=String(keyFn(r)||'미지정').trim()||'미지정';m.set(k,(m.get(k)||0)+1)}return [...m.entries()].sort((a,b)=>b[1]-a[1])}function currentMonth(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}function getMonthKey(dateStr){const s=String(dateStr||'');return /^\d{4}-\d{2}/.test(s)?s.slice(0,7):''}function monthLabel(m){const [y,mo]=String(m||'').split('-');return y&&mo?`${y}년 ${Number(mo)}월`:m}function shortMonthMetricLabel(m){const mo=String(m||'').split('-')[1];return mo?`${Number(mo)}월 불량`:'해당월 불량'}function updateSplitClock(){const txt=`기준 ${new Date().toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`;const a=$('splitIntNowTime');const b=$('splitExtNowTime');if(a)a.textContent=txt;if(b)b.textContent=txt}function decodeB64(id){let raw=($(id)?.textContent||'').replace(/\s+/g,'');if(!raw){const map={'external-b64':'external-b64.txt','internal-b64':'internal-b64.txt'};const xhr=new XMLHttpRequest();xhr.open('GET',map[id]||'',false);xhr.send(null);if(xhr.status>=200&&xhr.status<300)raw=String(xhr.responseText||'').replace(/\s+/g,'');}const bin=atob(raw);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return new TextDecoder('utf-8').decode(bytes)}
+function esc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}function unique(arr){return [...new Set((arr||[]).map(v=>String(v||'').trim()).filter(Boolean))]}function countBy(rows,keyFn){const m=new Map();for(const r of rows){const k=String(keyFn(r)||'미지정').trim()||'미지정';m.set(k,(m.get(k)||0)+1)}return [...m.entries()].sort((a,b)=>b[1]-a[1])}function currentMonth(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}function getMonthKey(dateStr){const s=String(dateStr||'');return /^\d{4}-\d{2}/.test(s)?s.slice(0,7):''}function monthLabel(m){const [y,mo]=String(m||'').split('-');return y&&mo?`${y}년 ${Number(mo)}월`:m}function shortMonthMetricLabel(m){const mo=String(m||'').split('-')[1];return mo?`${Number(mo)}월 불량`:'해당월 불량'}function updateSplitClock(){const txt=`기준 ${new Date().toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`;const a=$('splitIntNowTime');const b=$('splitExtNowTime');if(a)a.textContent=txt;if(b)b.textContent=txt}function decodeB64(id){
+  const el = $(id);
+  let raw = (el && el.textContent ? el.textContent : '').replace(/\s+/g,'');
+  if (!raw && el && el.dataset && el.dataset.src) {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', el.dataset.src, false);
+    xhr.send(null);
+    if (xhr.status >= 200 && xhr.status < 300) {
+      raw = String(xhr.responseText || '').replace(/\s+/g,'');
+    } else {
+      console.warn('Failed to load b64 data:', id, xhr.status);
+      raw = '';
+    }
+  }
+  if (!raw) return '';
+  const bin = atob(raw);
+  const bytes = new Uint8Array(bin.length);
+  for (let i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
 let htmlCache={},jsonCache={};function embeddedHtml(kind){if(!htmlCache[kind])htmlCache[kind]=decodeB64(kind==='external'?'external-b64':'internal-b64');return htmlCache[kind]}function embeddedJson(kind,scriptId){const key=kind+'::'+scriptId;if(jsonCache[key])return jsonCache[key];try{const doc=new DOMParser().parseFromString(embeddedHtml(kind),'text/html');const el=doc.getElementById(scriptId);jsonCache[key]=JSON.parse(el?.textContent||'[]')}catch(e){jsonCache[key]=[]}return jsonCache[key]}
 const SHARED_EXTERNAL_BASE_KEY='qualityIntegrated.sharedExternalBaseRows.v13_1';const SHARED_INTERNAL_BASE_KEY='qualityIntegrated.sharedInternalBaseRows.v13_1';const SHARED_BOM_KEY='qualityIntegrated.sharedBomRows.v13_1';
 function dedupeBy(rows,keyFn){const m=new Map();for(const r of rows||[]){const k=String(keyFn(r)||'').trim();if(k&&!m.has(k))m.set(k,r)}return [...m.values()]}
