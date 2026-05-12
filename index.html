@@ -231,6 +231,23 @@
       border: 1px solid var(--line);
       background: #eef2f7;
     }
+    .detail-photos a.photo-load-fail {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 1 / 1;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: var(--blue2);
+      text-decoration: none;
+      font-weight: 900;
+      font-size: 13px;
+      text-align: center;
+      padding: 8px;
+    }
+    .detail-photos a.photo-load-fail::after {
+      content: attr(data-label);
+    }
     @media (max-width: 360px) {
       .defect-filter-grid {
         grid-template-columns: 1fr;
@@ -978,9 +995,67 @@ function normalizePhotosFromDefect(d) {
   return [];
 }
 
+function extractDriveFileId(url) {
+  const s = String(url || '').trim();
+  if (!s) return '';
+
+  let m = s.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+
+  m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+
+  m = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+
+  return '';
+}
+
+function driveThumbnailUrl(fileId) {
+  if (!fileId) return '';
+  return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w800';
+}
+
+function driveOpenUrl(fileId) {
+  if (!fileId) return '';
+  return 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/view';
+}
+
+function normalizePhotoForDisplay(p) {
+  if (!p) return { thumb: '', open: '' };
+
+  const raw =
+    p.thumbnail ||
+    p.thumb ||
+    p.url ||
+    p.driveUrl ||
+    p.fileUrl ||
+    p.src ||
+    p.href ||
+    '';
+
+  const fileId = p.fileId || p.id || extractDriveFileId(raw) || extractDriveFileId(p.driveUrl) || extractDriveFileId(p.fileUrl);
+
+  if (fileId) {
+    return {
+      thumb: driveThumbnailUrl(fileId),
+      open: p.fileUrl || p.driveUrl || driveOpenUrl(fileId)
+    };
+  }
+
+  const url = String(raw || '').trim();
+  return {
+    thumb: url,
+    open: url
+  };
+}
+
 function photoUrlOf(p) {
-  if (!p) return '';
-  return p.thumbnail || p.url || p.driveUrl || p.fileUrl || p.src || p.href || '';
+  return normalizePhotoForDisplay(p).thumb;
+}
+
+function photoOpenUrlOf(p) {
+  return normalizePhotoForDisplay(p).open;
 }
 
 function getFilteredDefects() {
@@ -1017,7 +1092,7 @@ function renderDefectDetails() {
     const supplier = d.supplier || d.vendor || d['업체'] || d['외주업체'] || '';
     const cause = d.cause || d['원인'] || '';
     const action = d.action || d.countermeasure || d['조치내용'] || d['대책'] || '';
-    const photos = normalizePhotosFromDefect(d).map(photoUrlOf).filter(Boolean);
+    const photos = normalizePhotosFromDefect(d).map(p => normalizePhotoForDisplay(p)).filter(p => p.thumb || p.open);
 
     return `<div class="defect-card detail-card" data-idx="${idx}">
       <div class="top">
@@ -1036,7 +1111,7 @@ function renderDefectDetails() {
         <div class="detail-line"><b>불량내용</b><span>${escapeHtml(defectTitle || '-')}</span></div>
         ${cause ? `<div class="detail-line"><b>원인</b><span>${escapeHtml(cause)}</span></div>` : ''}
         ${action ? `<div class="detail-line"><b>조치/대책</b><span>${escapeHtml(action)}</span></div>` : ''}
-        ${photos.length ? `<div class="detail-photos">${photos.slice(0,3).map(u => `<a href="${escapeAttr(u)}" target="_blank" rel="noopener"><img src="${escapeAttr(u)}" alt="불량사진"></a>`).join('')}</div>` : ''}
+        ${photos.length ? `<div class="detail-photos">${photos.slice(0,3).map((p, pi) => `<a href="${escapeAttr(p.open || p.thumb)}" target="_blank" rel="noopener"><img src="${escapeAttr(p.thumb || p.open)}" alt="불량사진" onerror="this.style.display='none'; this.parentElement.classList.add('photo-load-fail'); this.parentElement.setAttribute('data-label','사진 열기');"></a>`).join('')}</div>` : ''}
       </div>
     </div>`;
   }).join('');
