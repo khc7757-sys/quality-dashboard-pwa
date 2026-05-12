@@ -1,11 +1,13 @@
-const CACHE_NAME = 'quality-mobile-field-pwa-v2-searchfix';
+const CACHE_NAME = 'quality-mobile-field-pwa-v4-instantsearch';
 
 const APP_FILES = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './external-b64.txt',
+  './internal-b64.txt'
 ];
 
 self.addEventListener('install', function(event) {

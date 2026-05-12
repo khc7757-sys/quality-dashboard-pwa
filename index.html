@@ -220,9 +220,10 @@
       border: 1px solid var(--line);
       border-radius: 14px;
       background: #fff;
-      max-height: 260px;
+      max-height: 300px;
       overflow: auto;
       margin-top: 8px;
+      box-shadow: 0 8px 20px rgba(16,24,40,.08);
     }
     .result {
       padding: 12px;
@@ -415,7 +416,7 @@
         <input id="partSearch" type="search" autocomplete="off" placeholder="품번 또는 품명을 입력하세요">
         <div id="selectedPart" class="selected-box"></div>
         <div id="searchResults" class="search-results"></div>
-        <div class="help">검색 후 품번을 선택하세요. 검색 결과가 없으면 품번/품명을 직접 입력할 수 있습니다.</div>
+        <div class="help">입력하면 아래에 결과가 바로 표시됩니다. 선택하면 품번/품명이 자동 입력됩니다.</div>
       </div>
 
       <div class="field">
@@ -505,6 +506,8 @@ const state = {
   masterRows: [],
   internalRows: [],
   externalRows: [],
+  embeddedRows: [],
+  embeddedLoaded: false,
   selectedPart: null,
   photos: []
 };
@@ -570,8 +573,8 @@ function normalizeGenericPartRow(row, i, kind) {
   const out = {
     kind: kind || '',
     rowId: row.rowId || row._id || row.id || ('G-' + i),
-    partNo: pickFirst(row, ['partNo','품번','품목번호','품목코드','PART NO','Part No','도번','도면번호','품목','code','itemCode']),
-    itemName: pickFirst(row, ['itemName','품명','품목명','PART NAME','Part Name','name','item','description','desc']),
+    partNo: pickFirst(row, ['partNo','품번','품목번호','품목코드','PART NO','Part No','도번','도면번호','품목','code','itemCode','rootPart','parentPart','childPart','drawingPart']),
+    itemName: pickFirst(row, ['itemName','품명','품목명','PART NAME','Part Name','name','item','description','desc','rootName','parentName','childName']),
     modelName: pickFirst(row, ['modelName','모델명','모델','MODEL','Model']),
     processName: pickFirst(row, ['processName','공정명','공정','PROCESS','Process','발견공정','공정구분']),
     partGroup: pickFirst(row, ['partGroup','파트명','파트','PART','Part','분류','구분']),
@@ -611,6 +614,75 @@ function collectRowsDeep(value, out, depth) {
   }
 }
 
+
+function base64ToUtf8(raw) {
+  raw = String(raw || '').replace(/\s+/g, '');
+  if (!raw) return '';
+  const bin = atob(raw);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+function extractJsonScript(htmlText, scriptId) {
+  const re = new RegExp('<script\\s+id="' + scriptId + '"[^>]*>([\\s\\S]*?)<\\/script>', 'i');
+  const m = String(htmlText || '').match(re);
+  if (!m) return [];
+  try {
+    const parsed = JSON.parse(m[1]);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn('기준자료 파싱 실패:', scriptId, e);
+    return [];
+  }
+}
+
+async function fetchTextIfExists(url) {
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return '';
+    return await res.text();
+  } catch (e) {
+    return '';
+  }
+}
+
+async function loadEmbeddedMasterData() {
+  if (state.embeddedLoaded) return;
+  state.embeddedLoaded = true;
+
+  const rows = [];
+
+  const externalB64 = await fetchTextIfExists('./external-b64.txt');
+  if (externalB64) {
+    try {
+      const externalHtml = base64ToUtf8(externalB64);
+      const baseRows = extractJsonScript(externalHtml, 'base-data');
+      const bomRows = extractJsonScript(externalHtml, 'bom-data');
+
+      baseRows.forEach((x, i) => rows.push(Object.assign({ __kindHint: 'external' }, x)));
+      bomRows.forEach((x, i) => rows.push(Object.assign({ __kindHint: 'external' }, x)));
+    } catch (e) {
+      console.warn('external-b64 기준자료 읽기 실패:', e);
+    }
+  }
+
+  const internalB64 = await fetchTextIfExists('./internal-b64.txt');
+  if (internalB64) {
+    try {
+      const internalHtml = base64ToUtf8(internalB64);
+      const workRows = extractJsonScript(internalHtml, 'work-data');
+      workRows.forEach((x, i) => rows.push(Object.assign({ __kindHint: 'internal' }, x)));
+    } catch (e) {
+      console.warn('internal-b64 기준자료 읽기 실패:', e);
+    }
+  }
+
+  state.embeddedRows = rows
+    .map((x, i) => normalizeGenericPartRow(x, i, x.__kindHint || ''))
+    .filter(r => r.partNo || r.itemName);
+}
+
 function rebuildPartSearchIndex() {
   const data = state.data || {};
   const md = data.masterData || {};
@@ -618,6 +690,8 @@ function rebuildPartSearchIndex() {
 
   const externalBase = Array.isArray(md.externalBaseRows) ? md.externalBaseRows : [];
   const internalBase = Array.isArray(md.internalBaseRows) ? md.internalBaseRows : [];
+
+  (state.embeddedRows || []).forEach(r => pushUniquePart(unique, r));
 
   externalBase.map(normalizeExternalRow).forEach(r => pushUniquePart(unique, r));
   internalBase.map(normalizeInternalRow).forEach(r => pushUniquePart(unique, r));
@@ -722,10 +796,12 @@ async function loadAll() {
   const out = await callGoogleSheet('loadAll', {});
   state.data = out.data || {};
 
+  await loadEmbeddedMasterData();
   rebuildPartSearchIndex();
 
   renderDashboard();
-  setStatus('구글시트 연동 완료 · 품번검색 ' + state.masterRows.length + '건 · ' + new Date().toLocaleTimeString('ko-KR'), '');
+  setStatus('구글시트 연동 완료 · ' + new Date().toLocaleTimeString('ko-KR'), '');
+  if ($('partSearch') && $('partSearch').value.trim()) searchParts();
 }
 
 function renderDashboard() {
@@ -785,8 +861,8 @@ function setKind(kind) {
 function renderSearchResults(rows) {
   const box = $('searchResults');
   if (!rows.length) {
-    box.style.display = 'none';
-    box.innerHTML = '';
+    box.style.display = 'block';
+    box.innerHTML = '<div class="result"><div class="pn">검색 결과 없음</div><div class="desc">품번/품명을 직접 입력할 수 있습니다.</div></div>';
     return;
   }
   box.style.display = 'block';
@@ -798,7 +874,7 @@ function renderSearchResults(rows) {
     ].filter(Boolean).join(' · ');
     return `<div class="result" data-idx="${idx}">
       <div class="pn">${escapeHtml(r.partNo || '(품번 없음)')}</div>
-      <div class="desc">${escapeHtml(sub || '')}</div>
+      <div class="desc">${escapeHtml((r.kind === 'external' ? '외주 · ' : '사내 · ') + (sub || ''))}</div>
     </div>`;
   }).join('');
   [...box.querySelectorAll('.result')].forEach((node, idx) => {
@@ -992,6 +1068,12 @@ function showTab(tab) {
   $('regPanel').classList.toggle('hidden', isDash);
   $('tabDash').classList.toggle('active', isDash);
   $('tabReg').classList.toggle('active', !isDash);
+  if (!isDash) setTimeout(function(){
+    if ($('partSearch')) {
+      $('partSearch').focus();
+      if ($('partSearch').value.trim()) searchParts();
+    }
+  }, 80);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
