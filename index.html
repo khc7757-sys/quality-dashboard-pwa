@@ -523,6 +523,7 @@
   <section id="regPanel" class="hidden">
     <div class="panel">
       <h2>불량 이력 등록</h2>
+      <div class="help">이 화면은 최초 접수 전용입니다. 조치 입력은 불량현황 상세의 [수정]에서 처리합니다.</div>
 
       <div class="field">
         <label>불량 구분</label>
@@ -583,16 +584,7 @@
       <div class="field">
         <label for="defectText">불량내용 <span style="color:#b42318">*</span></label>
         <textarea id="defectText" placeholder="불량 내용을 입력하세요"></textarea>
-      </div>
-
-      <div class="field">
-        <label for="cause">원인</label>
-        <textarea id="cause" placeholder="확인된 원인이 있으면 입력하세요"></textarea>
-      </div>
-
-      <div class="field">
-        <label for="countermeasure">대책 / 조치내용</label>
-        <textarea id="countermeasure" placeholder="임시조치 또는 개선대책"></textarea>
+        <div class="help">최초 등록은 접수용입니다. 원인/조치/대책은 불량현황 상세에서 나중에 수정하세요.</div>
       </div>
 
       <div class="field">
@@ -1482,9 +1474,9 @@ async function submitDefect() {
     owner: $('registrar').value.trim(),
     defect: $('defectText').value.trim(),
     status: '접수',
-    cause: $('cause').value.trim(),
-    countermeasure: $('countermeasure').value.trim(),
-    action: $('countermeasure').value.trim(),
+    cause: '',
+    countermeasure: '',
+    action: '',
     photos: state.photos,
     source: 'mobile-field-pwa',
     createdAt: new Date().toLocaleString('ko-KR'),
@@ -1525,7 +1517,7 @@ function resetForm(confirmFirst=true) {
   if (confirmFirst && !confirm('입력 내용을 초기화하시겠습니까?')) return;
   state.selectedPart = null;
   state.photos = [];
-  ['partSearch','partNo','itemName','processName','supplier','worker','registrar','defectText','cause','countermeasure'].forEach(id => $(id).value = '');
+  ['partSearch','partNo','itemName','processName','supplier','worker','registrar','defectText'].forEach(id => $(id).value = '');
   $('qty').value = '1';
   $('date').value = todayYmd();
   $('selectedPart').style.display = 'none';
