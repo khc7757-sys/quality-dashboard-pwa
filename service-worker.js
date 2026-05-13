@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quality-mobile-field-pwa-v6-photo-fix';
+const CACHE_NAME = 'quality-mobile-field-pwa-v9-detail-edit';
 
 const APP_FILES = [
   './',

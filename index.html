@@ -219,7 +219,7 @@
     }
     .detail-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
       margin-top: 12px;
     }
@@ -232,6 +232,11 @@
     .detail-actions .done-btn {
       background: var(--green);
       color: #fff;
+    }
+    .detail-actions .edit-btn {
+      background: #eff6ff;
+      color: var(--blue2);
+      border: 1px solid #bfdbfe;
     }
     .detail-actions .progress-btn {
       background: #fff7ed;
@@ -276,6 +281,9 @@
       .detail-line {
         grid-template-columns: 1fr;
         gap: 2px;
+      }
+      .detail-actions {
+        grid-template-columns: 1fr;
       }
     }
 
@@ -558,8 +566,8 @@
       </div>
 
       <div class="field">
-        <label for="worker">작업자 <span style="color:#b42318">*</span></label>
-        <input id="worker" type="text" placeholder="실제 작업자">
+        <label for="worker">작업자</label>
+        <input id="worker" type="text" placeholder="미확인 시 비워두고 나중에 수정">
       </div>
 
       <div class="field">
@@ -1098,6 +1106,72 @@ function defectIdForUpdate(d) {
   return String(d.id || d.defectId || d._id || '').trim();
 }
 
+
+async function editDefectFromMobile(d) {
+  const id = defectIdForUpdate(d);
+  if (!id) {
+    alert('이 불량은 ID가 없어 휴대폰에서 수정할 수 없습니다.\nPC 버전에서 확인하세요.');
+    return;
+  }
+
+  const kind = defectKindForUpdate(d);
+
+  const currentWorker = d.worker || d['작업자'] || '';
+  const currentQty = d.qty || d['수량'] || '';
+  const currentDefect = d.defect || d['불량내용'] || '';
+  const currentCause = d.cause || d['원인'] || '';
+  const currentAction = d.action || d.countermeasure || d['조치내용'] || d['대책'] || '';
+
+  const worker = prompt('작업자 수정\n미확인 상태면 빈칸으로 둘 수 있습니다.', currentWorker);
+  if (worker === null) return;
+
+  const qty = prompt('수량 수정', currentQty || '1');
+  if (qty === null) return;
+
+  const defectText = prompt('불량내용 수정', currentDefect);
+  if (defectText === null) return;
+
+  const cause = prompt('원인 수정', currentCause);
+  if (cause === null) return;
+
+  const action = prompt('조치/대책 수정', currentAction);
+  if (action === null) return;
+
+  const patch = {
+    worker: worker.trim(),
+    qty: Number(qty || 0) || currentQty || 1,
+    defect: defectText.trim(),
+    cause: cause.trim(),
+    countermeasure: action.trim(),
+    action: action.trim(),
+    updatedAt: new Date().toLocaleString('ko-KR')
+  };
+
+  if (!patch.defect) {
+    alert('불량내용은 비워둘 수 없습니다.');
+    return;
+  }
+
+  if (!confirm('수정 내용을 저장하시겠습니까?')) return;
+
+  try {
+    setStatus('불량 이력 수정 중...', 'warn');
+    await callGoogleSheet('updateDefect', {
+      kind: kind,
+      id: id,
+      patch: patch,
+      editor: patch.worker || d.registrar || d.owner || ''
+    });
+    setStatus('불량 이력 수정 완료', '');
+    alert('수정이 완료되었습니다.');
+    await loadAll();
+  } catch (e) {
+    console.error(e);
+    setStatus('수정 실패: ' + e.message, 'err');
+    alert('수정 실패\n' + e.message);
+  }
+}
+
 async function updateDefectStatusFromMobile(d, nextStatus) {
   const id = defectIdForUpdate(d);
   if (!id) {
@@ -1195,6 +1269,7 @@ function renderDefectDetails() {
         ${action ? `<div class="detail-line"><b>조치/대책</b><span>${escapeHtml(action)}</span></div>` : ''}
         ${photos.length ? `<div class="detail-photos">${photos.slice(0,3).map((p, pi) => `<a href="${escapeAttr(p.open || p.thumb)}" target="_blank" rel="noopener"><img src="${escapeAttr(p.thumb || p.open)}" alt="불량사진" onerror="this.style.display='none'; this.parentElement.classList.add('photo-load-fail'); this.parentElement.setAttribute('data-label','사진 열기');"></a>`).join('')}</div>` : ''}
         <div class="detail-actions">
+          <button type="button" class="edit-btn" data-action="edit" data-idx="${idx}">수정</button>
           ${status !== '조치중' && status !== '완료' ? `<button type="button" class="progress-btn" data-action="progress" data-idx="${idx}">조치중</button>` : ''}
           ${status !== '완료' ? `<button type="button" class="done-btn" data-action="done" data-idx="${idx}">완료</button>` : `<button type="button" disabled>완료됨</button>`}
         </div>
@@ -1211,6 +1286,7 @@ function renderDefectDetails() {
         const idx = Number(e.target.dataset.idx);
         const row = list[idx];
         if (!row) return;
+        if (e.target.dataset.action === 'edit') editDefectFromMobile(row);
         if (e.target.dataset.action === 'done') updateDefectStatusFromMobile(row, '완료');
         if (e.target.dataset.action === 'progress') updateDefectStatusFromMobile(row, '조치중');
         return;
@@ -1376,7 +1452,6 @@ function validateForm() {
 
   if (!partNo) return '품번을 입력하세요.';
   if (!date) return '발생일자를 입력하세요.';
-  if (!worker) return '작업자를 입력하세요.';
   if (!registrar) return '등록자를 입력하세요.';
   if (!qty || qty < 1) return '수량을 1 이상 입력하세요.';
   if (!defect) return '불량내용을 입력하세요.';
