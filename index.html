@@ -628,7 +628,10 @@ const state = {
   embeddedLoaded: false,
   selectedPart: null,
   defectFilter: 'internal',
-  photos: []
+  photos: [],
+  autoRefreshTimer: null,
+  autoRefreshRunning: false,
+  lastAutoRefreshAt: null
 };
 
 function setStatus(msg, type) {
@@ -919,7 +922,7 @@ async function loadAll() {
   rebuildPartSearchIndex();
 
   renderDashboard();
-  setStatus('구글시트 연동 완료 · ' + new Date().toLocaleTimeString('ko-KR'), '');
+  setStatus('구글시트 연동 완료 · ' + new Date().toLocaleTimeString('ko-KR') + ' · 자동갱신 2분', '');
   if ($('partSearch') && $('partSearch').value.trim()) searchParts();
   checkNewDefectAlert();
 }
@@ -1562,13 +1565,80 @@ function bind() {
   $('resetBtn').addEventListener('click', () => resetForm(true));
 }
 
+
+function updateAutoRefreshText(prefix) {
+  const el = $('status');
+  if (!el) return;
+  const now = new Date().toLocaleTimeString('ko-KR');
+  const base = prefix || '구글시트 연동 완료';
+  el.textContent = base + ' · ' + now + ' · 자동갱신 2분';
+}
+
+async function runAutoRefresh(reason) {
+  if (state.autoRefreshRunning) return;
+  if (document.hidden) return;
+
+  state.autoRefreshRunning = true;
+  try {
+    await loadAll();
+    state.lastAutoRefreshAt = new Date();
+    if (reason === 'resume') {
+      updateAutoRefreshText('구글시트 자동갱신 완료');
+    }
+  } catch (e) {
+    console.warn('자동 새로고침 실패:', e);
+    setStatus('자동 새로고침 실패: ' + (e.message || e), 'err');
+  } finally {
+    state.autoRefreshRunning = false;
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+
+  state.autoRefreshTimer = setInterval(function() {
+    runAutoRefresh('interval');
+  }, 2 * 60 * 1000);
+}
+
+function stopAutoRefresh() {
+  if (state.autoRefreshTimer) {
+    clearInterval(state.autoRefreshTimer);
+    state.autoRefreshTimer = null;
+  }
+}
+
+function bindAutoRefreshVisibility() {
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      stopAutoRefresh();
+    } else {
+      runAutoRefresh('resume');
+      startAutoRefresh();
+    }
+  });
+
+  window.addEventListener('focus', function() {
+    runAutoRefresh('focus');
+    startAutoRefresh();
+  });
+
+  window.addEventListener('blur', function() {
+    if (document.hidden) stopAutoRefresh();
+  });
+}
+
 function init() {
   bind();
+  bindAutoRefreshVisibility();
   $('date').value = todayYmd();
   setKind('internal');
-  loadAll().catch(e => {
+  loadAll().then(() => {
+    startAutoRefresh();
+  }).catch(e => {
     console.error(e);
     setStatus('구글시트 불러오기 실패: ' + e.message, 'err');
+    startAutoRefresh();
   });
 }
 
