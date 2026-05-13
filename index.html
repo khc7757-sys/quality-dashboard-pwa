@@ -217,6 +217,27 @@
     .detail-line b {
       color: #111827;
     }
+    .detail-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .detail-actions button {
+      min-height: 42px;
+      font-size: 13px;
+      border-radius: 12px;
+      padding: 9px 10px;
+    }
+    .detail-actions .done-btn {
+      background: var(--green);
+      color: #fff;
+    }
+    .detail-actions .progress-btn {
+      background: #fff7ed;
+      color: #9a3412;
+      border: 1px solid #fed7aa;
+    }
     .detail-photos {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -537,8 +558,13 @@
       </div>
 
       <div class="field">
-        <label for="worker">작업자 / 등록자 <span style="color:#b42318">*</span></label>
-        <input id="worker" type="text" placeholder="작업자 또는 등록자">
+        <label for="worker">작업자 <span style="color:#b42318">*</span></label>
+        <input id="worker" type="text" placeholder="실제 작업자">
+      </div>
+
+      <div class="field">
+        <label for="registrar">등록자 <span style="color:#b42318">*</span></label>
+        <input id="registrar" type="text" placeholder="불량을 등록하는 사람">
       </div>
 
       <div class="field">
@@ -1063,6 +1089,60 @@ function getFilteredDefects() {
   return getAllDefectsSorted().filter(d => d._kind === want);
 }
 
+
+function defectKindForUpdate(d) {
+  return d._kind === '외주' ? 'external' : 'internal';
+}
+
+function defectIdForUpdate(d) {
+  return String(d.id || d.defectId || d._id || '').trim();
+}
+
+async function updateDefectStatusFromMobile(d, nextStatus) {
+  const id = defectIdForUpdate(d);
+  if (!id) {
+    alert('이 불량은 ID가 없어 휴대폰에서 상태 변경할 수 없습니다.\nPC 버전에서 확인하세요.');
+    return;
+  }
+
+  const kind = defectKindForUpdate(d);
+  const editor = prompt('처리자 또는 완료자를 입력하세요.', '') || '';
+  if (!editor.trim()) return;
+
+  const isDone = nextStatus === '완료';
+  const patch = {
+    status: nextStatus,
+    updatedAt: new Date().toLocaleString('ko-KR')
+  };
+
+  if (isDone) {
+    patch.completedBy = editor.trim();
+    patch.completedAt = new Date().toLocaleString('ko-KR');
+    patch.action = d.action || d.countermeasure || d['조치내용'] || d['대책'] || '완료 처리';
+  } else {
+    patch.owner = editor.trim();
+  }
+
+  if (!confirm('상태를 [' + nextStatus + ']로 변경하시겠습니까?')) return;
+
+  try {
+    setStatus('상태 변경 중...', 'warn');
+    await callGoogleSheet('updateDefect', {
+      kind: kind,
+      id: id,
+      patch: patch,
+      editor: editor.trim()
+    });
+    setStatus('상태 변경 완료 · ' + nextStatus, '');
+    alert('상태가 [' + nextStatus + ']로 변경되었습니다.');
+    await loadAll();
+  } catch (e) {
+    console.error(e);
+    setStatus('상태 변경 실패: ' + e.message, 'err');
+    alert('상태 변경 실패\n' + e.message);
+  }
+}
+
 function renderDefectDetails() {
   const titleEl = $('defectListTitle');
   if (titleEl) titleEl.textContent = state.defectFilter === 'external' ? '외주 불량 상세내역' : '사내 불량 상세내역';
@@ -1087,7 +1167,8 @@ function renderDefectDetails() {
     const name = d.itemName || d['품명'] || '';
     const date = d.date || d['발생일자'] || d.createdAt || '';
     const qty = d.qty || d['수량'] || '';
-    const worker = d.worker || d['작업자'] || d.registrar || d.owner || '';
+    const worker = d.worker || d['작업자'] || '';
+    const registrar = d.registrar || d['등록자'] || d.owner || '';
     const process = d.processName || d.process || d['공정'] || '';
     const supplier = d.supplier || d.vendor || d['업체'] || d['외주업체'] || '';
     const cause = d.cause || d['원인'] || '';
@@ -1108,10 +1189,15 @@ function renderDefectDetails() {
         <div class="detail-line"><b>품명</b><span>${escapeHtml(name || '-')}</span></div>
         <div class="detail-line"><b>${state.defectFilter === 'external' ? '업체' : '공정'}</b><span>${escapeHtml((state.defectFilter === 'external' ? supplier : process) || '-')}</span></div>
         <div class="detail-line"><b>작업자</b><span>${escapeHtml(worker || '-')}</span></div>
+        <div class="detail-line"><b>등록자</b><span>${escapeHtml(registrar || '-')}</span></div>
         <div class="detail-line"><b>불량내용</b><span>${escapeHtml(defectTitle || '-')}</span></div>
         ${cause ? `<div class="detail-line"><b>원인</b><span>${escapeHtml(cause)}</span></div>` : ''}
         ${action ? `<div class="detail-line"><b>조치/대책</b><span>${escapeHtml(action)}</span></div>` : ''}
         ${photos.length ? `<div class="detail-photos">${photos.slice(0,3).map((p, pi) => `<a href="${escapeAttr(p.open || p.thumb)}" target="_blank" rel="noopener"><img src="${escapeAttr(p.thumb || p.open)}" alt="불량사진" onerror="this.style.display='none'; this.parentElement.classList.add('photo-load-fail'); this.parentElement.setAttribute('data-label','사진 열기');"></a>`).join('')}</div>` : ''}
+        <div class="detail-actions">
+          ${status !== '조치중' && status !== '완료' ? `<button type="button" class="progress-btn" data-action="progress" data-idx="${idx}">조치중</button>` : ''}
+          ${status !== '완료' ? `<button type="button" class="done-btn" data-action="done" data-idx="${idx}">완료</button>` : `<button type="button" disabled>완료됨</button>`}
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -1119,7 +1205,18 @@ function renderDefectDetails() {
   [...el.querySelectorAll('.detail-card')].forEach(card => {
     card.addEventListener('click', function(e) {
       const tag = e.target && String(e.target.tagName).toLowerCase();
-      if (tag === 'a' || tag === 'img') return;
+
+      if (e.target && e.target.dataset && e.target.dataset.action) {
+        e.stopPropagation();
+        const idx = Number(e.target.dataset.idx);
+        const row = list[idx];
+        if (!row) return;
+        if (e.target.dataset.action === 'done') updateDefectStatusFromMobile(row, '완료');
+        if (e.target.dataset.action === 'progress') updateDefectStatusFromMobile(row, '조치중');
+        return;
+      }
+
+      if (tag === 'a' || tag === 'img' || tag === 'button') return;
       card.classList.toggle('open');
     });
   });
@@ -1273,12 +1370,14 @@ function validateForm() {
   const partNo = $('partNo').value.trim();
   const date = $('date').value.trim();
   const worker = $('worker').value.trim();
+  const registrar = $('registrar').value.trim();
   const qty = Number($('qty').value || 0);
   const defect = $('defectText').value.trim();
 
   if (!partNo) return '품번을 입력하세요.';
   if (!date) return '발생일자를 입력하세요.';
-  if (!worker) return '작업자/등록자를 입력하세요.';
+  if (!worker) return '작업자를 입력하세요.';
+  if (!registrar) return '등록자를 입력하세요.';
   if (!qty || qty < 1) return '수량을 1 이상 입력하세요.';
   if (!defect) return '불량내용을 입력하세요.';
   return '';
@@ -1304,8 +1403,8 @@ async function submitDefect() {
     date: $('date').value.trim(),
     qty: Number($('qty').value || 1),
     worker: $('worker').value.trim(),
-    registrar: $('worker').value.trim(),
-    owner: $('worker').value.trim(),
+    registrar: $('registrar').value.trim(),
+    owner: $('registrar').value.trim(),
     defect: $('defectText').value.trim(),
     status: '접수',
     cause: $('cause').value.trim(),
@@ -1351,7 +1450,7 @@ function resetForm(confirmFirst=true) {
   if (confirmFirst && !confirm('입력 내용을 초기화하시겠습니까?')) return;
   state.selectedPart = null;
   state.photos = [];
-  ['partSearch','partNo','itemName','processName','supplier','worker','defectText','cause','countermeasure'].forEach(id => $(id).value = '');
+  ['partSearch','partNo','itemName','processName','supplier','worker','registrar','defectText','cause','countermeasure'].forEach(id => $(id).value = '');
   $('qty').value = '1';
   $('date').value = todayYmd();
   $('selectedPart').style.display = 'none';
