@@ -1,10 +1,10 @@
-const CACHE_NAME = 'quality-mobile-v13-icon-standard-final';
+const CACHE_NAME = 'quality-mobile-v13-transparent-icon-full';
 const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png"
 ];
 
 self.addEventListener('install', event => {
