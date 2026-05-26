@@ -4,24 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>품질현황 현장등록</title>
+  <!-- PWA / 휴대폰 홈 화면 아이콘 표시 설정 -->
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
-  <link rel="apple-touch-icon" href="./icon-512.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="./icon-512.png">
   <meta name="theme-color" content="#1646a3">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="품질현황">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-
-  <meta property="og:title" content="품질현황 현장등록">
-  <meta property="og:description" content="현장 불량 등록 및 품질현황 조회">
-  <meta property="og:image" content="https://khc7757-sys.github.io/quality-dashboard-pwa/icon-512.png">
-  <meta property="og:url" content="https://khc7757-sys.github.io/quality-dashboard-pwa/">
-  <meta property="og:type" content="website">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="품질현황 현장등록">
-  <meta name="twitter:description" content="현장 불량 등록 및 품질현황 조회">
-  <meta name="twitter:image" content="https://khc7757-sys.github.io/quality-dashboard-pwa/icon-512.png">
   <style>
     :root {
       --bg: #f3f6fb;
@@ -58,21 +51,11 @@
       box-shadow: 0 6px 18px rgba(0,0,0,.16);
     }
     .head-title {
-      display: flex;
-      align-items: center;
-      gap: 10px;
       font-size: 20px;
       font-weight: 900;
       letter-spacing: -0.02em;
       margin: 0;
       line-height: 1.2;
-    }
-    .head-title img {
-      width: 34px;
-      height: 34px;
-      border-radius: 9px;
-      background: #fff;
-      flex: 0 0 auto;
     }
     .head-sub {
       font-size: 12px;
@@ -503,7 +486,7 @@
 </head>
 <body>
 <header>
-  <h1 class="head-title"><img src="./icon-192.png" alt=""><span>품질현황 현장등록</span></h1>
+  <h1 class="head-title">품질현황 현장등록</h1>
   <div class="head-sub">휴대폰 전용 · 조회 / 불량 등록 / 사진 첨부</div>
 </header>
 
