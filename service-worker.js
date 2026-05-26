@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quality-mobile-field-pwa-v10-register-receipt';
+const CACHE_NAME = 'quality-mobile-field-pwa-v12-icon-shape';
 
 const APP_FILES = [
   './',
