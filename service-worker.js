@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quality-mobile-v13-transparent-icon-full';
+const CACHE_NAME = 'quality-mobile-v14-customer-claim';
 const ASSETS = [
   "./",
   "./index.html",
