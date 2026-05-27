@@ -508,6 +508,30 @@
       line-height: 1.35;
     }
 
+
+    .kpi .sub-count {
+      margin-top: 4px;
+      font-size: 14px;
+      font-weight: 900;
+      color: #991b1b;
+      line-height: 1.25;
+    }
+
+
+    .customer-claim-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      margin-left: 6px;
+      font-size: 12px;
+      font-weight: 900;
+      color: #991b1b;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      vertical-align: middle;
+    }
+
     .hidden { display: none !important; }
     @media (max-width: 360px) {
       .grid { grid-template-columns: 1fr; }
@@ -540,11 +564,13 @@
         <button id="internalDefectCard" class="kpi greenish defect-filter-card active" type="button">
           <div class="label">사내 불량</div>
           <div id="kInternal" class="num">0</div>
+          <div id="kInternalCustomer" class="sub-count">(고객불량) 0</div>
           <div class="hint">상세내역 보기</div>
         </button>
         <button id="externalDefectCard" class="kpi blueish defect-filter-card" type="button">
           <div class="label">외주 불량</div>
           <div id="kExternal" class="num">0</div>
+          <div id="kExternalCustomer" class="sub-count">(고객불량) 0</div>
           <div class="hint">상세내역 보기</div>
         </button>
       </div>
@@ -973,12 +999,42 @@ async function loadAll() {
   checkNewDefectAlert();
 }
 
+
+function isCustomerClaimDefect(d) {
+  if (!d) return false;
+  const raw = d.customerClaim ?? d.customerComplaint ?? d.customerClaimText ?? d.defectSource ?? d['고객불량'] ?? d['고객불반'] ?? '';
+  const text = String(raw === undefined || raw === null ? '' : raw).trim();
+  return raw === true ||
+    raw === 1 ||
+    text === '1' ||
+    text.toUpperCase() === 'Y' ||
+    text.toUpperCase() === 'YES' ||
+    text === '예' ||
+    text === '고객불량' ||
+    text === '고객불반' ||
+    text === '체크';
+}
+
 function renderDashboard() {
   const data = state.data || {};
-  const internal = safeArrayKey(data, 'internalDefects.v1').length;
-  const external = externalCount(data);
+  const internalList = safeArrayKey(data, 'internalDefects.v1');
+  const externalObj = safeObjectKey(data, 'partSearch.defectHistories.v1');
+  const externalList = [];
+  Object.keys(externalObj || {}).forEach(partNo => {
+    const list = externalObj[partNo];
+    if (!Array.isArray(list)) return;
+    list.forEach(d => externalList.push(Object.assign({}, d, { partNo: d.partNo || partNo })));
+  });
+
+  const internal = internalList.length;
+  const external = externalList.length;
+  const internalCustomer = internalList.filter(isCustomerClaimDefect).length;
+  const externalCustomer = externalList.filter(isCustomerClaimDefect).length;
+
   $('kInternal').textContent = internal;
   $('kExternal').textContent = external;
+  if ($('kInternalCustomer')) $('kInternalCustomer').textContent = '(고객불량) ' + internalCustomer;
+  if ($('kExternalCustomer')) $('kExternalCustomer').textContent = '(고객불량) ' + externalCustomer;
 
   renderDefectDetails();
 }
@@ -1268,6 +1324,10 @@ async function updateDefectStatusFromMobile(d, nextStatus) {
   }
 }
 
+
+function customerClaimBadgeHtml(d) {
+  return isCustomerClaimDefect(d) ? '<span class="badge customer-claim-badge">(고객불량)</span>' : '';
+}
 function renderDefectDetails() {
   const titleEl = $('defectListTitle');
   if (titleEl) titleEl.textContent = state.defectFilter === 'external' ? '외주 불량 상세내역' : '사내 불량 상세내역';
