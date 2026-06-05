@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quality-mobile-v15-customer-count-line';
+const CACHE_NAME = 'quality-mobile-v14-month-filter';
 const ASSETS = [
   "./",
   "./index.html",
