@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quality-mobile-v46-corrective-report';
+const CACHE_NAME = 'quality-mobile-v46-month-filter-1';
 const ASSETS = [
   "./",
   "./index.html",

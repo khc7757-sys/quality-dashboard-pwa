@@ -476,6 +476,23 @@
       grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
+    .month-filter-field {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid #d7e1f0;
+      border-radius: 16px;
+      background: #f8fbff;
+    }
+    .month-filter-field label {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .month-filter-field select {
+      font-size: 18px;
+      font-weight: 800;
+      background: #fff;
+    }
     .hidden { display: none !important; }
     @media (max-width: 360px) {
       .grid { grid-template-columns: 1fr; }
@@ -503,6 +520,11 @@
       <h2>불량현황</h2>
       <div class="actions">
         <button id="refreshBtn" class="primary" type="button">구글시트 새로고침</button>
+      </div>
+      <div class="field month-filter-field">
+        <label for="monthFilter">조회 월</label>
+        <select id="monthFilter" aria-label="조회 월 선택"></select>
+        <div id="monthFilterHint" class="help">선택한 월의 사내·외주 불량만 표시합니다.</div>
       </div>
       <div class="grid defect-filter-grid">
         <button id="internalDefectCard" class="kpi greenish defect-filter-card active" type="button">
@@ -644,6 +666,7 @@ const state = {
   embeddedLoaded: false,
   selectedPart: null,
   defectFilter: 'internal',
+  selectedMonth: currentYearMonth(),
   photos: [],
   autoRefreshTimer: null,
   autoRefreshRunning: false,
@@ -654,6 +677,11 @@ function setStatus(msg, type) {
   const el = $('status');
   el.textContent = msg;
   el.className = 'status' + (type ? ' ' + type : '');
+}
+
+function currentYearMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
 function todayYmd() {
@@ -943,13 +971,51 @@ async function loadAll() {
   checkNewDefectAlert();
 }
 
+function defectMonthKey(d) {
+  const raw = d.date || d['발생일자'] || d.createdAt || d.updatedAt || '';
+  const text = String(raw).trim();
+  const m = text.match(/(20\d{2})[^0-9]?(0?[1-9]|1[0-2])/);
+  if (m) return `${m[1]}-${String(Number(m[2])).padStart(2,'0')}`;
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}`;
+  }
+  return '';
+}
+
+function monthLabel(key) {
+  if (key === 'all') return '전체 기간';
+  const m = String(key || '').match(/^(\d{4})-(\d{2})$/);
+  return m ? `${m[1]}년 ${Number(m[2])}월` : key;
+}
+
+function populateMonthFilter() {
+  const select = $('monthFilter');
+  if (!select) return;
+  const months = Array.from(new Set(getAllDefectsSorted().map(defectMonthKey).filter(Boolean))).sort().reverse();
+  const current = state.selectedMonth || currentYearMonth();
+  if (current !== 'all' && !months.includes(current)) months.unshift(current);
+  select.innerHTML = ['<option value="all">전체 기간</option>']
+    .concat(months.map(m => `<option value="${m}">${monthLabel(m)}</option>`)).join('');
+  select.value = months.includes(current) || current === 'all' ? current : 'all';
+  state.selectedMonth = select.value;
+}
+
+function defectsForSelectedMonth() {
+  const all = getAllDefectsSorted();
+  if (!state.selectedMonth || state.selectedMonth === 'all') return all;
+  return all.filter(d => defectMonthKey(d) === state.selectedMonth);
+}
+
 function renderDashboard() {
-  const data = state.data || {};
-  const internal = safeArrayKey(data, 'internalDefects.v1').length;
-  const external = externalCount(data);
+  populateMonthFilter();
+  const monthRows = defectsForSelectedMonth();
+  const internal = monthRows.filter(d => d._kind === '사내').length;
+  const external = monthRows.filter(d => d._kind === '외주').length;
   $('kInternal').textContent = internal;
   $('kExternal').textContent = external;
-
+  const hint = $('monthFilterHint');
+  if (hint) hint.textContent = `${monthLabel(state.selectedMonth)} 기준 · 사내 ${internal}건 / 외주 ${external}건`;
   renderDefectDetails();
 }
 
@@ -1105,7 +1171,7 @@ function photoOpenUrlOf(p) {
 
 function getFilteredDefects() {
   const want = state.defectFilter === 'external' ? '외주' : '사내';
-  return getAllDefectsSorted().filter(d => d._kind === want);
+  return defectsForSelectedMonth().filter(d => d._kind === want);
 }
 
 
@@ -1230,7 +1296,10 @@ async function updateDefectStatusFromMobile(d, nextStatus) {
 
 function renderDefectDetails() {
   const titleEl = $('defectListTitle');
-  if (titleEl) titleEl.textContent = state.defectFilter === 'external' ? '외주 불량 상세내역' : '사내 불량 상세내역';
+  if (titleEl) {
+    const kindTitle = state.defectFilter === 'external' ? '외주 불량' : '사내 불량';
+    titleEl.textContent = `${monthLabel(state.selectedMonth)} · ${kindTitle} 상세내역`;
+  }
 
   const internalCard = $('internalDefectCard');
   const externalCard = $('externalDefectCard');
@@ -1283,7 +1352,6 @@ function renderDefectDetails() {
           <button type="button" class="edit-btn" data-action="edit" data-idx="${idx}">수정</button>
           ${status !== '조치중' && status !== '완료' ? `<button type="button" class="progress-btn" data-action="progress" data-idx="${idx}">조치중</button>` : ''}
           ${status !== '완료' ? `<button type="button" class="done-btn" data-action="done" data-idx="${idx}">완료</button>` : `<button type="button" disabled>완료됨</button>`}
-          ${d.correctiveFileId ? `<button type="button" class="edit-btn" data-action="download-report" data-idx="${idx}">통보서 다운로드</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -1624,6 +1692,10 @@ function bind() {
   $('bottomReg').addEventListener('click', () => showTab('reg'));
   $('internalDefectCard').addEventListener('click', () => setDefectFilter('internal'));
   $('externalDefectCard').addEventListener('click', () => setDefectFilter('external'));
+  $('monthFilter').addEventListener('change', function() {
+    state.selectedMonth = this.value || 'all';
+    renderDashboard();
+  });
   $('refreshBtn').addEventListener('click', () => loadAll().catch(e => {
     setStatus('불러오기 실패: ' + e.message, 'err');
     alert(e.message);
@@ -1637,16 +1709,6 @@ function bind() {
   $('galleryInput').addEventListener('change', e => addFiles(e.target.files).finally(() => e.target.value = ''));
   $('submitBtn').addEventListener('click', submitDefect);
   $('resetBtn').addEventListener('click', () => resetForm(true));
-  $('issueCorrective').addEventListener('change', function(){
-    const checked = this.checked;
-    $('replyDueWrap').classList.toggle('hidden', !checked);
-    $('submitBtn').textContent = checked ? '저장 및 통보서 발행' : '불량 등록';
-    if (checked && !$('replyDueDate').value) {
-      const d = new Date();
-      d.setDate(d.getDate() + 7);
-      $('replyDueDate').value = d.toISOString().slice(0,10);
-    }
-  });
 }
 
 
