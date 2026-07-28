@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>품질현황 현장등록</title>
+  <title>품질현황 V46 모바일</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-512.png">
@@ -458,43 +458,6 @@
       line-height: 1.45;
       margin-top: 6px;
     }
-    .month-filter {
-      margin-top: 10px;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      gap: 8px;
-    }
-    .month-filter label {
-      font-size: 13px;
-      font-weight: 800;
-      color: #344054;
-      margin: 0;
-    }
-    .month-filter select {
-      min-height: 42px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 0 12px;
-      font-size: 14px;
-      background: #fff;
-      color: var(--ink);
-    }
-    .month-filter button {
-      min-height: 42px;
-      padding: 0 12px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: #fff;
-      color: var(--ink);
-      font-weight: 800;
-    }
-    .month-caption {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.45;
-    }
     .fixed-bottom {
       position: fixed;
       left: 0;
@@ -523,8 +486,8 @@
 </head>
 <body>
 <header>
-  <h1 class="head-title">품질현황 현장등록</h1>
-  <div class="head-sub">휴대폰 전용 · 조회 / 불량 등록 / 사진 첨부</div>
+  <h1 class="head-title">품질현황 V46 모바일</h1>
+  <div class="head-sub">휴대폰 전용 · 조회 / 불량 등록 / 사진 첨부 / 개선조치 통보서</div>
 </header>
 
 <div class="wrap">
@@ -541,12 +504,6 @@
       <div class="actions">
         <button id="refreshBtn" class="primary" type="button">구글시트 새로고침</button>
       </div>
-      <div class="month-filter">
-        <label for="monthFilter">월 구분</label>
-        <select id="monthFilter" aria-label="월 구분"></select>
-        <button id="monthAllBtn" type="button">전체</button>
-      </div>
-      <div id="monthCaption" class="month-caption">현재월 기준으로 조회합니다.</div>
       <div class="grid defect-filter-grid">
         <button id="internalDefectCard" class="kpi greenish defect-filter-card active" type="button">
           <div class="label">사내 불량</div>
@@ -646,6 +603,18 @@
         <div id="previews" class="previews"></div>
       </div>
 
+      <div class="field" style="border:1px solid #c7d7f4;border-radius:12px;padding:12px;background:#f6f9ff;">
+        <label style="display:flex;align-items:center;gap:10px;margin:0;">
+          <input id="issueCorrective" type="checkbox" style="width:20px;height:20px;">
+          <span>개선조치 통보서 함께 발행</span>
+        </label>
+        <div id="replyDueWrap" class="hidden" style="margin-top:12px;">
+          <label for="replyDueDate">회신 요청일 <span style="color:#b42318">*</span></label>
+          <input id="replyDueDate" type="date">
+          <div class="help">나머지 항목은 등록된 불량정보에서 자동 입력됩니다.</div>
+        </div>
+      </div>
+
       <div class="actions">
         <button id="submitBtn" class="green" type="button">불량 등록</button>
         <button id="resetBtn" class="red" type="button">입력 초기화</button>
@@ -675,7 +644,6 @@ const state = {
   embeddedLoaded: false,
   selectedPart: null,
   defectFilter: 'internal',
-  selectedMonth: '',
   photos: [],
   autoRefreshTimer: null,
   autoRefreshRunning: false,
@@ -694,72 +662,6 @@ function todayYmd() {
   const m = String(d.getMonth()+1).padStart(2,'0');
   const day = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
-}
-
-function currentMonthValue() {
-  return todayYmd().slice(0, 7);
-}
-
-function monthLabel(v) {
-  if (!v) return '전체';
-  const m = String(v).match(/^(\d{4})-(\d{2})$/);
-  return m ? `${m[1]}년 ${Number(m[2])}월` : String(v);
-}
-
-function parseDefectMonth(d) {
-  const raw = String(d && (d.date || d['발생일자'] || d.createdAt || d.updatedAt || '') || '').trim();
-  if (!raw) return '';
-
-  let m = raw.match(/(\d{4})[-./년\s]*(\d{1,2})/);
-  if (m) return `${m[1]}-${String(Number(m[2])).padStart(2, '0')}`;
-
-  const t = Date.parse(raw);
-  if (Number.isFinite(t)) {
-    const dt = new Date(t);
-    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2, '0')}`;
-  }
-  return '';
-}
-
-function defectMatchesSelectedMonth(d) {
-  if (!state.selectedMonth) return true;
-  return parseDefectMonth(d) === state.selectedMonth;
-}
-
-function uniqueDefectMonths() {
-  const months = new Set();
-  allDefects(state.data || {}).forEach(d => {
-    const m = parseDefectMonth(d);
-    if (m) months.add(m);
-  });
-  months.add(currentMonthValue());
-  return Array.from(months).sort().reverse();
-}
-
-function ensureSelectedMonth() {
-  const saved = localStorage.getItem('quality_mobile_selected_month_v1') || '';
-  if (!state.selectedMonth) state.selectedMonth = saved || currentMonthValue();
-}
-
-function renderMonthFilter() {
-  const sel = $('monthFilter');
-  if (!sel) return;
-
-  ensureSelectedMonth();
-  const months = uniqueDefectMonths();
-  if (state.selectedMonth && !months.includes(state.selectedMonth)) months.unshift(state.selectedMonth);
-
-  sel.innerHTML = '<option value="">전체 월</option>' + months.map(m => `<option value="${escapeAttr(m)}">${escapeHtml(monthLabel(m))}</option>`).join('');
-  sel.value = state.selectedMonth || '';
-
-  const caption = $('monthCaption');
-  if (caption) caption.textContent = state.selectedMonth ? `${monthLabel(state.selectedMonth)} 기준으로 집계/상세내역을 표시합니다.` : '전체 기간 기준으로 집계/상세내역을 표시합니다.';
-}
-
-function setSelectedMonth(v) {
-  state.selectedMonth = String(v || '').trim();
-  localStorage.setItem('quality_mobile_selected_month_v1', state.selectedMonth);
-  renderDashboard();
 }
 
 function pickFirst(row, keys) {
@@ -1016,7 +918,7 @@ async function callGoogleSheet(action, payload) {
     method: 'POST',
     mode: 'cors',
     headers: {'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({ action, payload, clientVersion:'mobile-field-v1', sentAt:new Date().toISOString() })
+    body: JSON.stringify({ action, payload, clientVersion:'mobile-v46', sentAt:new Date().toISOString() })
   });
   const text = await res.text();
   let out;
@@ -1043,11 +945,8 @@ async function loadAll() {
 
 function renderDashboard() {
   const data = state.data || {};
-  renderMonthFilter();
-
-  const list = allDefects(data).filter(defectMatchesSelectedMonth);
-  const internal = list.filter(d => d._kind === '사내').length;
-  const external = list.filter(d => d._kind === '외주').length;
+  const internal = safeArrayKey(data, 'internalDefects.v1').length;
+  const external = externalCount(data);
   $('kInternal').textContent = internal;
   $('kExternal').textContent = external;
 
@@ -1206,7 +1105,7 @@ function photoOpenUrlOf(p) {
 
 function getFilteredDefects() {
   const want = state.defectFilter === 'external' ? '외주' : '사내';
-  return getAllDefectsSorted().filter(d => d._kind === want && defectMatchesSelectedMonth(d));
+  return getAllDefectsSorted().filter(d => d._kind === want);
 }
 
 
@@ -1331,10 +1230,7 @@ async function updateDefectStatusFromMobile(d, nextStatus) {
 
 function renderDefectDetails() {
   const titleEl = $('defectListTitle');
-  if (titleEl) {
-    const baseTitle = state.defectFilter === 'external' ? '외주 불량 상세내역' : '사내 불량 상세내역';
-    titleEl.textContent = state.selectedMonth ? `${baseTitle} · ${monthLabel(state.selectedMonth)}` : `${baseTitle} · 전체`;
-  }
+  if (titleEl) titleEl.textContent = state.defectFilter === 'external' ? '외주 불량 상세내역' : '사내 불량 상세내역';
 
   const internalCard = $('internalDefectCard');
   const externalCard = $('externalDefectCard');
@@ -1345,8 +1241,7 @@ function renderDefectDetails() {
   const el = $('recentList');
 
   if (!list.length) {
-    const monthText = state.selectedMonth ? monthLabel(state.selectedMonth) + '에 ' : '';
-    el.innerHTML = '<div class="empty">' + escapeHtml(monthText) + '선택한 구분의 불량 이력이 없습니다.</div>';
+    el.innerHTML = '<div class="empty">선택한 구분의 불량 이력이 없습니다.</div>';
     return;
   }
 
@@ -1388,6 +1283,7 @@ function renderDefectDetails() {
           <button type="button" class="edit-btn" data-action="edit" data-idx="${idx}">수정</button>
           ${status !== '조치중' && status !== '완료' ? `<button type="button" class="progress-btn" data-action="progress" data-idx="${idx}">조치중</button>` : ''}
           ${status !== '완료' ? `<button type="button" class="done-btn" data-action="done" data-idx="${idx}">완료</button>` : `<button type="button" disabled>완료됨</button>`}
+          ${d.correctiveFileId ? `<button type="button" class="edit-btn" data-action="download-report" data-idx="${idx}">통보서 다운로드</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -1405,6 +1301,12 @@ function renderDefectDetails() {
         if (e.target.dataset.action === 'edit') editDefectFromMobile(row);
         if (e.target.dataset.action === 'done') updateDefectStatusFromMobile(row, '완료');
         if (e.target.dataset.action === 'progress') updateDefectStatusFromMobile(row, '조치중');
+        if (e.target.dataset.action === 'download-report') {
+          downloadCorrectiveReport(row._kind === '사내' ? 'internal' : 'external', row.id, row.correctiveFileId).catch(err => {
+            setStatus('통보서 다운로드 실패: ' + err.message, 'err');
+            alert('통보서 다운로드 실패\n' + err.message);
+          });
+        }
         return;
       }
 
@@ -1571,7 +1473,41 @@ function validateForm() {
   if (!registrar) return '등록자를 입력하세요.';
   if (!qty || qty < 1) return '수량을 1 이상 입력하세요.';
   if (!defect) return '불량내용을 입력하세요.';
+  if ($('issueCorrective') && $('issueCorrective').checked && !$('replyDueDate').value) return '회신 요청일을 입력하세요.';
   return '';
+}
+
+function base64ToBlob(base64, mimeType) {
+  const binary = atob(base64);
+  const chunkSize = 1024;
+  const chunks = [];
+  for (let offset = 0; offset < binary.length; offset += chunkSize) {
+    const slice = binary.slice(offset, offset + chunkSize);
+    const bytes = new Uint8Array(slice.length);
+    for (let i = 0; i < slice.length; i++) bytes[i] = slice.charCodeAt(i);
+    chunks.push(bytes);
+  }
+  return new Blob(chunks, {type: mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+
+function saveBlobToDevice(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName || '개선조치통보서.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+async function downloadCorrectiveReport(kind, id, fileId) {
+  setStatus('통보서 다운로드 준비 중...', 'warn');
+  const out = await callGoogleSheet('downloadCorrectiveReport', {kind, id, fileId: fileId || ''});
+  const blob = base64ToBlob(out.base64, out.mimeType);
+  saveBlobToDevice(blob, out.fileName);
+  setStatus('통보서 다운로드 완료', '');
+  return out;
 }
 
 async function submitDefect() {
@@ -1581,7 +1517,8 @@ async function submitDefect() {
     return;
   }
 
-  if (!confirm('불량 이력을 등록하시겠습니까?')) return;
+  const issueReport = !!($('issueCorrective') && $('issueCorrective').checked);
+  if (!confirm(issueReport ? '불량을 등록하고 개선조치 통보서를 발행하시겠습니까?' : '불량 이력을 등록하시겠습니까?')) return;
 
   const submit = $('submitBtn');
   submit.disabled = true;
@@ -1622,8 +1559,20 @@ async function submitDefect() {
       defect,
       registrar: defect.registrar
     });
-    setStatus('불량 등록 완료 · ID: ' + (out.id || ''), '');
-    alert('불량 등록이 완료되었습니다.');
+    if (issueReport) {
+      setStatus('불량 등록 완료 · 통보서 생성 중...', 'warn');
+      const report = await callGoogleSheet('createCorrectiveReport', {
+        kind: state.kind,
+        id: out.id,
+        replyDueDate: $('replyDueDate').value,
+        issuer: defect.registrar
+      });
+      await downloadCorrectiveReport(state.kind, out.id, report.fileId);
+      alert('불량 등록과 개선조치 통보서 발행이 완료되었습니다.');
+    } else {
+      setStatus('불량 등록 완료 · ID: ' + (out.id || ''), '');
+      alert('불량 등록이 완료되었습니다.');
+    }
     resetForm(false);
     await loadAll();
     markCurrentDefectsSeen();
@@ -1644,6 +1593,10 @@ function resetForm(confirmFirst=true) {
   ['partSearch','partNo','itemName','processName','supplier','worker','registrar','defectText'].forEach(id => $(id).value = '');
   $('qty').value = '1';
   $('date').value = todayYmd();
+  if ($('issueCorrective')) $('issueCorrective').checked = false;
+  if ($('replyDueDate')) $('replyDueDate').value = '';
+  if ($('replyDueWrap')) $('replyDueWrap').classList.add('hidden');
+  if ($('submitBtn')) $('submitBtn').textContent = '불량 등록';
   $('selectedPart').style.display = 'none';
   renderSearchResults([]);
   renderPhotos();
@@ -1675,8 +1628,6 @@ function bind() {
     setStatus('불러오기 실패: ' + e.message, 'err');
     alert(e.message);
   }));
-  $('monthFilter').addEventListener('change', e => setSelectedMonth(e.target.value));
-  $('monthAllBtn').addEventListener('click', () => setSelectedMonth(''));
   $('kindInternal').addEventListener('click', () => setKind('internal'));
   $('kindExternal').addEventListener('click', () => setKind('external'));
   $('partSearch').addEventListener('input', searchParts);
@@ -1686,6 +1637,16 @@ function bind() {
   $('galleryInput').addEventListener('change', e => addFiles(e.target.files).finally(() => e.target.value = ''));
   $('submitBtn').addEventListener('click', submitDefect);
   $('resetBtn').addEventListener('click', () => resetForm(true));
+  $('issueCorrective').addEventListener('change', function(){
+    const checked = this.checked;
+    $('replyDueWrap').classList.toggle('hidden', !checked);
+    $('submitBtn').textContent = checked ? '저장 및 통보서 발행' : '불량 등록';
+    if (checked && !$('replyDueDate').value) {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      $('replyDueDate').value = d.toISOString().slice(0,10);
+    }
+  });
 }
 
 
@@ -1754,7 +1715,6 @@ function bindAutoRefreshVisibility() {
 function init() {
   bind();
   bindAutoRefreshVisibility();
-  ensureSelectedMonth();
   $('date').value = todayYmd();
   setKind('internal');
   loadAll().then(() => {
