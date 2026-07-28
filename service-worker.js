@@ -1,17 +1,16 @@
-const CACHE_NAME = 'quality-mobile-v46-month-filter-1';
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+const CACHE_NAME = 'quality-mobile-v46-month-filter-2-20260728';
+const CORE_ASSETS = [
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-192-maskable.png',
+  './icon-512-maskable.png'
 ];
 
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS).catch(() => undefined))
   );
 });
 
@@ -27,25 +26,28 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
-  if (request.mode === 'navigate') {
+  const url = new URL(request.url);
+  const isPage = request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+
+  if (isPage) {
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
-          return response;
-        })
+      fetch(new Request(request, { cache: 'no-store' }))
+        .then(response => response)
         .catch(() => caches.match('./index.html'))
     );
     return;
   }
 
   event.respondWith(
-    caches.match(request)
-      .then(cached => cached || fetch(request).then(response => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+    caches.match(request).then(cached => {
+      const network = fetch(request).then(response => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+        }
         return response;
-      }))
+      });
+      return cached || network;
+    })
   );
 });
